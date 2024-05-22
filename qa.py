@@ -9,19 +9,21 @@ import spacy
 
 
 def word_change(word):
-  '''Changes a word to a word that wikidata understand'''
-  if "groot" in word or "hoog" in word or "lang" in word:
-    return "hoogte"
-  if "oud" in word:
-    return "levensverwachting"
-  if "zwaar" in word or "weegt" in word:
-    return "gewicht"
-  if "heet" in word:
-    return "naam"
-  if "leeft" in word:
-    return "levensverwachting"
-  else:
-    return word
+    '''Changes a word to a word that wikidata understand'''
+
+    prop_words = {
+        'groot': 'hoogte',
+        'hoog': 'hoogte',
+        'lang': 'hoogte',
+        'oud': 'levensverwachting',
+        'leven': 'levensverwachting',
+        'zwaar': 'gewicht',
+        'wegen': 'gewicht',
+        'heten': 'naam'
+    }
+
+    if word in prop_words:
+        return prop_words[word]
   
 
 def welke_questions(parse):
@@ -31,10 +33,10 @@ def welke_questions(parse):
     entity_word = ""
     property_word = ""
     for word in parse:
-      if word.dep_ == 'nsubj':
-        entity_word = word
-      elif word.dep_ == 'obj':
-        property_word = word
+        if word.dep_ == 'nsubj':
+            entity_word = word.lemma_
+        elif word.dep_ == 'obj':
+            property_word = word.lemma_
 
     return entity_word, property_word
 
@@ -45,16 +47,18 @@ def hoe_questions(parse):
     '''
     for word in parse:
         if word.pos_ == 'NOUN':
-            entity_word = word.text
+            entity_word = word.lemma_
         elif word.pos_ == 'ADJ' or word.pos_ == 'VERB':
-            property_word = word.text
+            property_word = word.lemma_
+    
     return entity_word, property_word
 
 
 def main():
     nlp = spacy.load("nl_core_news_lg")
 
-    question = input("Stel een vraag over een dier. \n")
+#    question = input("Stel een vraag over een dier. \n")
+    question = "Hoe lang leeft een kat?"
     parse = nlp(question)
 
     if str(parse[0]) == 'Hoe' or str(parse[0]) == 'Hoeveel':
@@ -99,6 +103,7 @@ def main():
               ?answernode wikibase:quantityUnit ?unit .
               SERVICE wikibase:label { bd:serviceParam wikibase:language "nl" .}}
               '''
+
     query2 = 'SELECT ?answerLabel WHERE { wd:' + ID2 + ' wdt:' + ID1 + ' ?answer . SERVICE wikibase:label { bd:serviceParam wikibase:language "nl" .}}'
 
     data = requests.get('https://query.wikidata.org/sparql', params={'query': query, 'format': 'json'}).json()
