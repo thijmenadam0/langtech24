@@ -24,6 +24,9 @@ def word_change(word):
 
     if word in prop_words:
         return prop_words[word]
+    
+    else:
+        return word
   
 
 def welke_questions(parse):
@@ -57,8 +60,8 @@ def hoe_questions(parse):
 def main():
     nlp = spacy.load("nl_core_news_lg")
 
-    question = input("Stel een vraag over een dier. \n")
-    #question = "Hoe lang leeft een kat?"
+    # question = input("Stel een vraag over een dier. \n")
+    question = "Welke kleur heeft een ijsbeer?"
     parse = nlp(question)
 
     if str(parse[0]) == 'Hoe' or str(parse[0]) == 'Hoeveel':
