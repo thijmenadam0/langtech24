@@ -57,8 +57,8 @@ def hoe_questions(parse):
 def main():
     nlp = spacy.load("nl_core_news_lg")
 
-#    question = input("Stel een vraag over een dier. \n")
-    question = "Hoe lang leeft een kat?"
+    question = input("Stel een vraag over een dier. \n")
+    #question = "Hoe lang leeft een kat?"
     parse = nlp(question)
 
     if str(parse[0]) == 'Hoe' or str(parse[0]) == 'Hoeveel':
@@ -92,14 +92,15 @@ def main():
     params['search'] = str(entity_word)
 
     json = requests.get(url,params_p).json()
-    # ID1 = json['search'][0]['id']
-    id1_list = json['search']
+    ID1 = json['search'][0]['id']
 
     json = requests.get(url,params).json()
-    ID2 = json['search'][0]['id']
+    #ID2 = json['search'][0]['id']
+    id2_list = json['search']
 
-    for i in range(len(id1_list)):
-        ID1 = id1_list[i]['id']
+    for i in range(len(id2_list)):
+        output = []
+        ID2 = id2_list[i]['id']
         query = '''SELECT ?value ?unitLabel WHERE {wd:''' + ID2 + ''' p:''' + ID1 + ''' ?answer .
                 ?answer psv:''' + ID1 + ''' ?answernode .
                 ?answernode wikibase:quantityAmount ?value .
@@ -114,14 +115,21 @@ def main():
         if data["results"]["bindings"] != []:
             for item in data["results"]["bindings"]:
                 for var in item:
-                    print("{}\t{}".format(var,item[var]["value"]))
+                    output.append("{}\t{}".format(var,item[var]["value"]))
 
         else:
             data = requests.get('https://query.wikidata.org/sparql', params={'query': query2, 'format': 'json'}).json()
             for item in data["results"]["bindings"]:
                 for var in item:
-                    print("{}\t{}".format(var,item[var]["value"]))
+                    output.append("{}\t{}".format(var,item[var]["value"]))
+        
+        if len(output) != 0:
+            break
 
+    for i in output:
+        print(i)
+
+        
 
 if __name__ == "__main__":
    main()
