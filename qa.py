@@ -92,32 +92,35 @@ def main():
     params['search'] = str(entity_word)
 
     json = requests.get(url,params_p).json()
-    ID1 = json['search'][0]['id']
+    # ID1 = json['search'][0]['id']
+    id1_list = json['search']
 
     json = requests.get(url,params).json()
     ID2 = json['search'][0]['id']
 
-    query = '''SELECT ?value ?unitLabel WHERE {wd:''' + ID2 + ''' p:''' + ID1 + ''' ?answer .
-              ?answer psv:''' + ID1 + ''' ?answernode .
-              ?answernode wikibase:quantityAmount ?value .
-              ?answernode wikibase:quantityUnit ?unit .
-              SERVICE wikibase:label { bd:serviceParam wikibase:language "nl" .}}
-              '''
+    for i in range(len(id1_list)):
+        ID1 = id1_list[i]['id']
+        query = '''SELECT ?value ?unitLabel WHERE {wd:''' + ID2 + ''' p:''' + ID1 + ''' ?answer .
+                ?answer psv:''' + ID1 + ''' ?answernode .
+                ?answernode wikibase:quantityAmount ?value .
+                ?answernode wikibase:quantityUnit ?unit .
+                SERVICE wikibase:label { bd:serviceParam wikibase:language "nl" .}}
+                '''
 
-    query2 = 'SELECT ?answerLabel WHERE { wd:' + ID2 + ' wdt:' + ID1 + ' ?answer . SERVICE wikibase:label { bd:serviceParam wikibase:language "nl" .}}'
+        query2 = 'SELECT ?answerLabel WHERE { wd:' + ID2 + ' wdt:' + ID1 + ' ?answer . SERVICE wikibase:label { bd:serviceParam wikibase:language "nl" .}}'
 
-    data = requests.get('https://query.wikidata.org/sparql', params={'query': query, 'format': 'json'}).json()
+        data = requests.get('https://query.wikidata.org/sparql', params={'query': query, 'format': 'json'}).json()
 
-    if data["results"]["bindings"] != []:
-        for item in data["results"]["bindings"]:
-            for var in item:
-                print("{}\t{}".format(var,item[var]["value"]))
+        if data["results"]["bindings"] != []:
+            for item in data["results"]["bindings"]:
+                for var in item:
+                    print("{}\t{}".format(var,item[var]["value"]))
 
-    else:
-        data = requests.get('https://query.wikidata.org/sparql', params={'query': query2, 'format': 'json'}).json()
-        for item in data["results"]["bindings"]:
-            for var in item:
-                print("{}\t{}".format(var,item[var]["value"]))
+        else:
+            data = requests.get('https://query.wikidata.org/sparql', params={'query': query2, 'format': 'json'}).json()
+            for item in data["results"]["bindings"]:
+                for var in item:
+                    print("{}\t{}".format(var,item[var]["value"]))
 
 
 if __name__ == "__main__":
