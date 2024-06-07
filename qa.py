@@ -57,11 +57,35 @@ def hoe_questions(parse):
     return entity_word, property_word
 
 
+def get_id(word, word_type):
+
+    '''
+    Receives word and word type as strrings,
+    finds their equivalents in wikidata database
+    and returns list of matches as a dict
+    '''
+
+    url = 'https://www.wikidata.org/w/api.php'
+    params = {'action':'wbsearchentities',
+              'language':'nl',
+              'uselang': 'nl',
+              'format': 'json'}
+
+    if word_type == 'property':
+        params['type'] = 'property'
+
+    params['search'] = word
+    json = requests.get(url, params).json()
+
+    return json['search']
+
+
 def main():
     nlp = spacy.load("nl_core_news_lg")
 
     # question = input("Stel een vraag over een dier. \n")
-    question = "Welke kleur heeft een ijsbeer?"
+    question = "Wat is het unicode-symbool van een hond?"
+    question = question.replace("elke kleuren", "elke kleur")
     parse = nlp(question)
 
     if str(parse[0]) == 'Hoe' or str(parse[0]) == 'Hoeveel':
@@ -79,27 +103,8 @@ def main():
         property_word = re.sub(r'\bde\b|\bhet\b|\been\b', '', all_chunks[0])
         entity_word = re.sub(r'\bde\b|\bhet\b|\been\b', '', all_chunks[1])
 
-    url = 'https://www.wikidata.org/w/api.php'
-    params = {'action':'wbsearchentities',
-            'language':'nl',
-            'uselang':'nl',
-            'format':'json'}
-
-    params_p = {'action':'wbsearchentities',
-                'type':'property',
-                'language':'nl',
-                'uselang':'nl',
-                'format':'json'}
-
-    params_p['search'] = property_word
-    params['search'] = str(entity_word)
-
-    json = requests.get(url,params_p).json()
-    ID1 = json['search'][0]['id']
-
-    json = requests.get(url,params).json()
-    #ID2 = json['search'][0]['id']
-    id2_list = json['search']
+    ID1 = get_id(property_word, "property")[0]['id']
+    id2_list = get_id(entity_word, "entity")
 
     for i in range(len(id2_list)):
         output = []
