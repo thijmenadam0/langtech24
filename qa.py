@@ -8,6 +8,14 @@ import re
 import spacy
 
 
+def phrase(word):
+    children = []
+    for child in word.subtree :
+        children.append(child.text)
+    result = " ".join(children)
+    return re.sub(r'^(de |het |een )', '', result)
+
+
 def word_change(word):
     '''Changes a word to a word that wikidata understand'''
 
@@ -27,7 +35,7 @@ def word_change(word):
     
     else:
         return word
-  
+
 
 def welke_questions(parse):
     '''This function makes it so it returns the entity and property
@@ -37,7 +45,8 @@ def welke_questions(parse):
     property_word = ""
     for word in parse:
         if word.dep_ == 'nsubj':
-            entity_word = word.lemma_
+            #entity_word = word.lemma_
+            entity_word = phrase(word)
         elif word.dep_ == 'obj':
             property_word = word.lemma_
 
@@ -50,8 +59,10 @@ def hoe_questions(parse):
     '''
     for word in parse:
         if word.pos_ == 'NOUN':
-            entity_word = word.lemma_
-        elif word.pos_ == 'ADJ' or word.pos_ == 'VERB':
+            #entity_word = word.lemma_
+            entity_word = phrase(word)
+
+        elif word.dep_ == "ROOT" and (word.pos_ == 'ADJ' or word.pos_ == 'VERB'):
             property_word = word.lemma_
     
     return entity_word, property_word
@@ -84,7 +95,8 @@ def main():
     nlp = spacy.load("nl_core_news_lg")
 
     # question = input("Stel een vraag over een dier. \n")
-    question = "Wat is het unicode-symbool van een hond?"
+    question = "Wat is de spanwijdte van de blauwe reiger?"
+    # question = "Hoe zwaar is een ijsbeer?"
     question = question.replace("elke kleuren", "elke kleur")
     parse = nlp(question)
 
@@ -95,6 +107,7 @@ def main():
     elif str(parse[0]) == 'Welke':
         entity_word, property_word = welke_questions(parse)
         property_word = word_change(str(property_word))
+
 
     else:
         all_chunks = []
@@ -130,7 +143,7 @@ def main():
             for item in data["results"]["bindings"]:
                 for var in item:
                     output.append("{}\t{}".format(var,item[var]["value"]))
-        
+
         if len(output) != 0:
             break
 
