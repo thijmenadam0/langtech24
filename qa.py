@@ -27,6 +27,8 @@ def phrase(word):
                 children.append(child.text)
     result = " ".join(children)
     result = re.sub(r'^(van |tot )', '', result) # remove cases of noun phrases like 'van een kat' 'tot de familie...'
+    result = re.sub(r'(per keer)', '', result) # remove cases of noun phrases like 'eieren per keer''
+
     return re.sub(r'^(de |het |een )', '', result)
 
 
@@ -44,6 +46,14 @@ def word_change(word):
         'heten': 'naam'
     }
 
+    noun_words = {
+        'ei' : 'nestgrootte',
+        # SpaCy thinks the lemma of eitjes is eit
+        'eit' : 'nestgrootte',
+        'kind' : 'nestgrootte',
+        'reuzentoekans': 'reuzentoekan'
+    }
+
     verb_words = {
         'hebben' : 'omvat deel',
         'eten' : ''
@@ -51,6 +61,9 @@ def word_change(word):
 
     if word in prop_words:
         return prop_words[word]
+    
+    elif word in noun_words:
+        return noun_words[word]
     
     else:
         return word
@@ -76,14 +89,30 @@ def hoe_questions(parse):
     words for questions sarting with 'hoe'
     '''
     for word in parse:
-        if word.pos_ == 'NOUN' and word.dep_ == 'nsubj': # TODO: find out why I added word.dep_ in the first place
-            #entity_word = word.lemma_
+
+        if word.pos_ == 'NOUN' and (word.dep_ == 'nsubj' or word.dep_ == 'obj'): # TODO: find out why I added word.dep_ in the first place
+            # entity_word = word.lemma_
             entity_word = phrase(word)
 
         elif word.dep_ == "ROOT" and (word.pos_ == 'ADJ' or word.pos_ == 'VERB'):
             property_word = word.lemma_
     
+    # Hebben and leggen are auxiliaries, they are never property words.
+    if property_word == 'leggen' or property_word == 'hebben':
+        for word in parse:
+            if word.pos_ == 'NOUN' and word.dep_ == 'nsubj':
+                property_word = word.lemma_
+                break # Because we need the first one, as that is how Dutch questions are posed.
+    
     return entity_word, property_word
+
+
+# TODO: Get the count_questions working (Hoeveel soorten leeuwen zijn er)
+
+def count_questions(parse):
+    ''''''
+
+    return
 
 
 def janee_questions(parse, is_behoort):
@@ -114,8 +143,8 @@ def janee_questions(parse, is_behoort):
         value_word = parse[-2].lemma_ # [-1] is always punctuation
         entity_word = noun_phrases[0].split()[0]
 
-    #print(noun_phrases)
-    #print(entity_word, property_word, value_word)
+    # print(noun_phrases)
+    # print(entity_word, property_word, value_word)
 
     return entity_word, property_word, value_word
 
@@ -208,13 +237,21 @@ def main():
     # --- JA / NEE questions ---
 
     # question = "Behoren de olifanten tot de subklasse van zoogdieren?"
-    question = "Behoort de pinguin tot de familie van vogels?"
+    # question = "Behoort de pinguin tot de familie van vogels?"
     # question = "Is de draagtijd van een kat 64 dagen?"
     # question = "Is de levensverwachting van een kat 14 jaar?" # Answer is no
     # question = "Is een olifant grijs?" # Does not work with multiple colors
     # question = "Zijn vleermuizen zoogdieren?"
     # question = "Zijn vleermuizen dieren?" # Answer is no
     # question = "Zijn vleermuizen 1.8288036 meter lang?"
+
+    # ---- HOE / HOEVEEL questions ---
+    # question = "Hoeveel soorten leeuwen zijn er?"
+    # question = "Hoeveel weegt een tijger?"
+    # question = "Hoe groot is een olifant?"
+    # question = "Hoeveel eitjes legt een gewone octopus per keer?"
+    # question = "Hoeveel eieren leggen reuzentoekans per keer?"
+    question = "Hoeveel kinderen heeft een reuzentoekan per keer?"
 
     question = question.replace('elke kleuren', 'elke kleur')
     question = question.replace('?', '')
@@ -226,6 +263,7 @@ def main():
 
     if str(parse[0]) == 'Hoe' or str(parse[0]) == 'Hoeveel':
         entity_word, property_word = hoe_questions(parse)
+        entity_word = word_change(str(entity_word))
         property_word = word_change(str(property_word))
 
     elif str(parse[0]) == 'Welke':
@@ -248,6 +286,7 @@ def main():
     id2_list = get_id(entity_word, "entity")
 
     # process the queries that require property words
+
     if len(value_word) == 0:
         ID1 = get_id(property_word, "property")[0]['id']
 
@@ -262,7 +301,7 @@ def main():
                     '''
 
             query2 = 'SELECT ?answerLabel WHERE { wd:' + ID2 + ' wdt:' + ID1 + ' ?answer . SERVICE wikibase:label { bd:serviceParam wikibase:language "nl" .}}'
-
+            
             data = requests.get('https://query.wikidata.org/sparql', params={'query': query, 'format': 'json'}).json()
 
             if data["results"]["bindings"] != []:
