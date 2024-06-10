@@ -115,7 +115,7 @@ def count_questions(parse):
     return
 
 
-def janee_questions(parse, is_behoort):
+def janee_questions(parse, is_behoort, verb_lemma: ''):
 
     '''
     This function takes a sentence parse, takes the necessary
@@ -123,12 +123,30 @@ def janee_questions(parse, is_behoort):
     then returns them as strings
     '''
 
+    verb_dict= {
+        'eten': 'belangrijkste voedselbron'
+    }
+
     property_word = ""
     noun_phrases = []
+    if verb_lemma:
+        property_word = verb_dict[verb_lemma]
     for word in parse:
         # print(word, word.pos_, word.dep_)
         if word.pos_ == 'NOUN':
-            noun_phrases.append(phrase(word))
+            # ensure lemmatization, except for if the word is plant
+            # as wiktionary can only handle the word 'planten'
+            w_phrase = phrase(word)
+            w_lemma = word.lemma_
+            if ' ' in w_phrase:
+                for w in w_phrase.split():
+                    if w.startswith('w_lemma'):
+                        w_phrase.replace(w, w_lemma)
+            else:
+                w_phrase = w_lemma
+                if w_phrase == 'plant':
+                    w_phrase = 'planten'
+            noun_phrases.append(w_phrase)
 
 
     if len(noun_phrases) > 2 and not is_behoort:
@@ -144,7 +162,7 @@ def janee_questions(parse, is_behoort):
         entity_word = noun_phrases[0].split()[0]
 
     # print(noun_phrases)
-    # print(entity_word, property_word, value_word)
+    # print('ent', entity_word, 'prop', property_word, 'val', value_word)
 
     return entity_word, property_word, value_word
 
@@ -244,6 +262,9 @@ def main():
     # question = "Zijn vleermuizen zoogdieren?"
     # question = "Zijn vleermuizen dieren?" # Answer is no
     # question = "Zijn vleermuizen 1.8288036 meter lang?"
+    # question = "Eten olifanten planten?"
+    question = "Eet de koala planten?"
+
 
     # ---- HOE / HOEVEEL questions ---
     # question = "Hoeveel soorten leeuwen zijn er?"
@@ -251,7 +272,7 @@ def main():
     # question = "Hoe groot is een olifant?"
     # question = "Hoeveel eitjes legt een gewone octopus per keer?"
     # question = "Hoeveel eieren leggen reuzentoekans per keer?"
-    question = "Hoeveel kinderen heeft een reuzentoekan per keer?"
+    # question = "Hoeveel kinderen heeft een reuzentoekan per keer?"
 
     question = question.replace('elke kleuren', 'elke kleur')
     question = question.replace('?', '')
@@ -275,6 +296,9 @@ def main():
 
     elif str(parse[0]) == 'Behoort'or str(parse[0]) == 'Behoren':
         entity_word, property_word, value_word = janee_questions(parse, True)
+
+    elif parse[0].pos_ == 'VERB':
+        entity_word, property_word, value_word = janee_questions(parse, False, parse[0].lemma_)
 
     else:
         all_chunks = []
@@ -324,8 +348,9 @@ def main():
         value_word, is_value_num = value_unit(value_word)
 
         # Loop through the first 3 possible entries of the entity
+        output = "No"
         for i in range(len(id2_list[:3])):
-            output = "No"
+
             ID2 = id2_list[i]['id']
 
             query_unit = '''SELECT ?wdLabel ?final WHERE {
