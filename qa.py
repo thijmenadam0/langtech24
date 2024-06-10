@@ -54,11 +54,6 @@ def word_change(word):
         'reuzentoekans': 'reuzentoekan'
     }
 
-    verb_words = {
-        'hebben' : 'omvat deel',
-        'eten' : ''
-    }
-
     if word in prop_words:
         return prop_words[word]
     
@@ -115,7 +110,7 @@ def count_questions(parse):
     return
 
 
-def janee_questions(parse, is_behoort, verb_lemma: ''):
+def janee_questions(parse, is_behoort, verb_lemma=''):
 
     '''
     This function takes a sentence parse, takes the necessary
@@ -124,7 +119,9 @@ def janee_questions(parse, is_behoort, verb_lemma: ''):
     '''
 
     verb_dict= {
-        'eten': 'belangrijkste voedselbron'
+        'eten' : 'belangrijkste voedselbron',
+        'Hebben' : 'omvat deel', # spacy does not
+        # 'Heeft' : 'omvat deel',  # recognize them as verbs
     }
 
     property_word = ""
@@ -164,7 +161,7 @@ def janee_questions(parse, is_behoort, verb_lemma: ''):
         entity_word = noun_phrases[0].split()[0]
 
     #print(noun_phrases)
-    #print('ent', entity_word, 'prop', property_word, 'val', value_word)
+    # print('ent', entity_word, 'prop', property_word, 'val', value_word)
 
     return entity_word, property_word, value_word
 
@@ -214,6 +211,26 @@ def wikidata_value_formatize(phrase):
         return ' '.join(phrase_list)
 
 
+def run_desc_query(ID2):
+
+    '''
+    Recieves a wikidata entity ID to run
+    an entity description query, then returns the
+    results as a json file
+    '''
+
+    query_desc = '''SELECT ?entDesc WHERE 
+                            {
+                                SERVICE wikibase:label {
+                                    bd:serviceParam wikibase:language "nl" .
+                                    wd:''' + ID2 + ''' schema:description ?entDesc .
+                                }
+                            }
+                        '''
+
+    return requests.get('https://query.wikidata.org/sparql', params={'query': query_desc, 'format': 'json'}).json()
+
+
 def get_id(word, word_type):
 
     '''
@@ -253,12 +270,14 @@ def main():
     # question = "Wat is het unicode-symbool van een reuzenpanda?"
     # question = "Wat is de wetenschappelijke naam van de blobvis?"
     # question = "Wat is de hoogst geobserveerde levensduur van een zeehond?"
+    # question = "Wat is de beschrijving van een pinguin?"
 
     # --- JA / NEE questions ---
 
     # question = "Behoren de olifanten tot de subklasse van zoogdieren?"
     # question = "Behoort de pinguin tot de familie van vogels?"
     # question = "Is de draagtijd van een kat 64 dagen?"
+    # question = "Is de egel een bedreigde diersoort"
     # question = "Is de levensverwachting van een kat 14 jaar?" # Answer is no
     # question = "Is een olifant grijs?" # Does not work with multiple colors
     # question = "Zijn vleermuizen zoogdieren?"
@@ -266,6 +285,8 @@ def main():
     # question = "Zijn vleermuizen 1.8288036 meter lang?"
     # question = "Eten olifanten planten?"
     # question = "Eet de koala bladeren?"
+    # question = "Heeft de geit hoorns?" # Does not work :(
+    # question = "Hebben geiten hoorns?"
 
 
     # ---- HOE / HOEVEEL questions ---
@@ -299,7 +320,7 @@ def main():
     elif str(parse[0]) == 'Behoort'or str(parse[0]) == 'Behoren':
         entity_word, property_word, value_word = janee_questions(parse, True)
 
-    elif parse[0].pos_ == 'VERB':
+    elif parse[0].pos_ == 'VERB' or parse[0].pos_ == 'AUX':
         entity_word, property_word, value_word = janee_questions(parse, False, parse[0].lemma_)
 
     else:
@@ -312,37 +333,46 @@ def main():
     id2_list = get_id(entity_word, "entity")
 
     # process the queries that require property words
-
     if len(value_word) == 0:
-        ID1 = get_id(property_word, "property")[0]['id']
+
+        if property_word != " beschrijving":
+            ID1 = get_id(property_word, "property")[0]['id']
 
         for i in range(len(id2_list)):
             output = []
             ID2 = id2_list[i]['id']
-            query = '''SELECT ?value ?unitLabel WHERE {wd:''' + ID2 + ''' p:''' + ID1 + ''' ?answer .
-                    ?answer psv:''' + ID1 + ''' ?answernode .
-                    ?answernode wikibase:quantityAmount ?value .
-                    ?answernode wikibase:quantityUnit ?unit .
-                    SERVICE wikibase:label { bd:serviceParam wikibase:language "nl" .}}
-                    '''
 
-            query2 = 'SELECT ?answerLabel WHERE { wd:' + ID2 + ' wdt:' + ID1 + ' ?answer . SERVICE wikibase:label { bd:serviceParam wikibase:language "nl" .}}'
-            
-            data = requests.get('https://query.wikidata.org/sparql', params={'query': query, 'format': 'json'}).json()
+            if property_word == " beschrijving":
+                data = run_desc_query(ID2)
+                if data["results"]["bindings"] != [{}]:
+                    output = data["results"]["bindings"][0]["entDesc"]["value"]
+                    break
 
-            if data["results"]["bindings"] != []:
-                for item in data["results"]["bindings"]:
-                    for var in item:
-                        output.append("{}\t{}".format(var,item[var]["value"]))
+            else:   
+                query = '''SELECT ?value ?unitLabel WHERE {wd:''' + ID2 + ''' p:''' + ID1 + ''' ?answer .
+                        ?answer psv:''' + ID1 + ''' ?answernode .
+                        ?answernode wikibase:quantityAmount ?value .
+                        ?answernode wikibase:quantityUnit ?unit .
+                        SERVICE wikibase:label { bd:serviceParam wikibase:language "nl" .}}
+                        '''
 
-            else:
-                data = requests.get('https://query.wikidata.org/sparql', params={'query': query2, 'format': 'json'}).json()
-                for item in data["results"]["bindings"]:
-                    for var in item:
-                        output.append("{}\t{}".format(var,item[var]["value"]))
+                query2 = 'SELECT ?answerLabel WHERE { wd:' + ID2 + ' wdt:' + ID1 + ' ?answer . SERVICE wikibase:label { bd:serviceParam wikibase:language "nl" .}}'
+                
+                data = requests.get('https://query.wikidata.org/sparql', params={'query': query, 'format': 'json'}).json()
 
-            if len(output) != 0:
-                break
+                if data["results"]["bindings"] != []:
+                    for item in data["results"]["bindings"]:
+                        for var in item:
+                            output.append("{}\t{}".format(var,item[var]["value"]))
+
+                else:
+                    data = requests.get('https://query.wikidata.org/sparql', params={'query': query2, 'format': 'json'}).json()
+                    for item in data["results"]["bindings"]:
+                        for var in item:
+                            output.append("{}\t{}".format(var,item[var]["value"]))
+
+                if len(output) != 0:
+                    break
 
     # process the queries that require the value words (ja/nee questions)
     else:
@@ -375,14 +405,6 @@ def main():
                         }
                     '''
             
-            query_desc = '''SELECT ?entDesc WHERE 
-                            {
-                                SERVICE wikibase:label {
-                                    bd:serviceParam wikibase:language "nl" .
-                                    wd:''' + ID2 + ''' schema:description ?entDesc .
-                                }
-                            }
-                        '''
 
             query_text = '''SELECT DISTINCT ?propUrl ?propLabel ?valUrl ?valLabel  WHERE
                             {
@@ -412,10 +434,9 @@ def main():
                         else:
                             output = "Yes"
 
-
             else:
                 # run the query that checks the entity description only
-                data = requests.get('https://query.wikidata.org/sparql', params={'query': query_desc, 'format': 'json'}).json()
+                data = run_desc_query(ID2)
                 if data["results"]["bindings"] != [{}]:
                     if data["results"]["bindings"][0]["entDesc"]["value"] in value_word:
                         output = "Yes"
@@ -425,12 +446,15 @@ def main():
                         data = requests.get('https://query.wikidata.org/sparql', params={'query': query_text, 'format': 'json'}).json()
                         for item in data["results"]["bindings"]:
                             # print(item["propLabel"]["value"], item["valLabel"]["value"])
-                            # find a match between the value in the sentence and value in the output
-                            if item["valLabel"]["value"] in value_word:
+                            # find a match between the value in the question and value in the output
+                            if item["valLabel"]["value"] in value_word and item["valLabel"]["value"] != "soort":
+
                                 # extra validation of the property value if exists in the question
                                 if property_word != "":
                                     if item["propLabel"]["value"] in property_word:
                                         output = "Yes"
+
+                                # else assume no property exists in the question
                                 else:
                                     output = "Yes"
 
