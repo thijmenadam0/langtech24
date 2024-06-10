@@ -158,11 +158,13 @@ def janee_questions(parse, is_behoort, verb_lemma: ''):
         value_word = noun_phrases[1]
     else:
         # if not, choose the last word of the sentence as the value
-        value_word = parse[-2].lemma_ # [-1] is always punctuation
+        value_word = parse[-1].lemma_
+        if value_word == 'plant':
+            value_word = 'planten'
         entity_word = noun_phrases[0].split()[0]
 
-    # print(noun_phrases)
-    # print('ent', entity_word, 'prop', property_word, 'val', value_word)
+    #print(noun_phrases)
+    #print('ent', entity_word, 'prop', property_word, 'val', value_word)
 
     return entity_word, property_word, value_word
 
@@ -263,7 +265,7 @@ def main():
     # question = "Zijn vleermuizen dieren?" # Answer is no
     # question = "Zijn vleermuizen 1.8288036 meter lang?"
     # question = "Eten olifanten planten?"
-    question = "Eet de koala planten?"
+    # question = "Eet de koala bladeren?"
 
 
     # ---- HOE / HOEVEEL questions ---
