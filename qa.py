@@ -17,9 +17,9 @@ def phrase(word):
     children = []
     for child in word.subtree :
         if child.dep_ != 'cop' and child.dep_ != 'nmod:poss': # get rid of words 'zijn' and 'is'
-            if word.dep_ == "ROOT":
+            if word.dep_ == 'ROOT' or word.dep_ == 'nsubj':
                 # allow only adj and det to be added to the root noun phrase
-                if child.pos_ == "ADJ" or child.pos_ == "DET" or child.dep_ == "amod": # amod for 'bedreigde diersoort'
+                if child.pos_ == 'ADJ' or child.pos_ == 'DET' or child.dep_ == 'amod': # amod for 'bedreigde diersoort'
                     children.append(child.text)
                 elif child.text == word.text:
                     children.append(child.lemma_)
@@ -32,7 +32,7 @@ def phrase(word):
     return re.sub(r'^(de |het |een )', '', result)
 
 
-def word_change(word):
+def word_change(word, is_waar=False):
     '''Changes a word to a word that wikidata understand'''
 
     prop_words = {
@@ -51,15 +51,28 @@ def word_change(word):
         # SpaCy thinks the lemma of eitjes is eit
         'eit' : 'nestgrootte',
         'kind' : 'nestgrootte',
-        'reuzentoekans': 'reuzentoekan'
+        'reuzentoekans': 'reuzentoekan',
+        "kiwi's" : 'kiwi',
+        'kangeroe' : 'kangoeroes'
     }
 
-    if word in prop_words:
+    root_words = {
+        'vinden' : ['habitat', 'endemisch in'],
+        'leven' : ['habitat', 'endemisch in'],
+        'komen vandaan' : ['habitat', 'endemisch in'],
+        'komen voor' : ['habitat', 'endemisch in'],
+        'goed voor' : ['gebruik']
+    }
+
+    if word in prop_words and not is_waar:
         return prop_words[word]
     
     elif word in noun_words:
         return noun_words[word]
-    
+
+    elif word in root_words and is_waar:
+        return root_words[word]
+
     else:
         return word
 
@@ -78,6 +91,27 @@ def welke_questions(parse):
 
     return entity_word, property_word
 
+
+def waar_questions(parse):
+    '''This function makes it so it returns the entity and property
+    words for questions sarting with 'waar'
+    '''
+
+    for word in parse:
+        if word.pos_ == 'NOUN':
+            entity_word = phrase(word)
+
+        elif word.dep_ == 'ROOT' and (word.pos_ == 'VERB' or word.pos_ == 'ADJ'):
+            for child in word.subtree:
+                # print(child.text, child.pos_, child.dep_)
+                if child.pos_ == 'ADP' and (child.dep_ == 'obl' or child.dep_ == 'compound:prt'):
+                    property_word = word.lemma_ + ' ' + child.text
+                elif child.pos_ == 'NOUN' and child.dep_ == 'nsubj':
+                    property_word = word.lemma_
+
+    # print(entity_word, property_word)
+
+    return entity_word, property_word
 
 def hoe_questions(parse):
     '''This function makes it so it returns the entity and property
@@ -211,6 +245,37 @@ def wikidata_value_formatize(phrase):
         return ' '.join(phrase_list)
 
 
+def run_query(ID1, ID2):
+
+    '''
+    Takes two wikidata IDs and puts them in different
+    queries, then returns the output of the query
+    if the match was found as a list
+    '''
+
+    output = []
+
+    query = '''SELECT ?value ?unitLabel WHERE {wd:''' + ID2 + ''' p:''' + ID1 + ''' ?answer .
+                            ?answer psv:''' + ID1 + ''' ?answernode .
+                            ?answernode wikibase:quantityAmount ?value .
+                            ?answernode wikibase:quantityUnit ?unit .
+                            SERVICE wikibase:label { bd:serviceParam wikibase:language "nl" .}}
+                            '''
+
+    query2 = 'SELECT ?answerLabel WHERE { wd:' + ID2 + ' wdt:' + ID1 + ' ?answer . SERVICE wikibase:label { bd:serviceParam wikibase:language "nl" .}}'
+
+    query_list = [query, query2]
+
+    for query in query_list:
+        data = requests.get('https://query.wikidata.org/sparql', params={'query': query, 'format': 'json'}).json()
+        if data["results"]["bindings"] != []:
+            for item in data["results"]["bindings"]:
+                for var in item:
+                    output.append("{}\t{}".format(var,item[var]["value"]))
+
+    return output
+
+
 def run_desc_query(ID2):
 
     '''
@@ -259,6 +324,15 @@ def main():
 
     # question = input("Stel een vraag over een dier. \n")
 
+    # question = "Waar is een hond goed voor?"
+    # question = "Waar komt de kiwi voor?"
+    # question = "Waar komen koala's voor?"
+    # question = "Waar komen goudhamsters oorspronkelijk vandaan?"
+    # question = "Waar komen de kiwi's vandaan?"
+    # question = "Waar leven kiwi's?"
+    # question = "Waar leeft de kangeroe?"
+    # question = "Waar is de kiwi te vinden?"
+
     # question = "Welke kleur heeft een olifant?"
     # question = "Welke kleuren heeft een orca?"
     # question = "Hoeveel weegt een tijger?"
@@ -304,6 +378,7 @@ def main():
     property_word = ""
     entity_word = ""
     value_word = ""
+    output = "Answer is not found"
 
     if str(parse[0]) == 'Hoe' or str(parse[0]) == 'Hoeveel':
         entity_word, property_word = hoe_questions(parse)
@@ -313,6 +388,11 @@ def main():
     elif str(parse[0]) == 'Welke':
         entity_word, property_word = welke_questions(parse)
         property_word = word_change(str(property_word))
+
+    elif str(parse[0]) == 'Waar':
+        entity_word, property_word = waar_questions(parse)
+        property_word = word_change(property_word, True)
+        entity_word = word_change(entity_word)
 
     elif str(parse[0]) == 'Zijn' or str(parse[0]) == 'Is':
         entity_word, property_word, value_word = janee_questions(parse, False)
@@ -334,10 +414,6 @@ def main():
 
     # process the queries that require property words
     if len(value_word) == 0:
-
-        if property_word != " beschrijving":
-            ID1 = get_id(property_word, "property")[0]['id']
-
         for i in range(len(id2_list)):
             output = []
             ID2 = id2_list[i]['id']
@@ -348,31 +424,21 @@ def main():
                     output = data["results"]["bindings"][0]["entDesc"]["value"]
                     break
 
-            else:   
-                query = '''SELECT ?value ?unitLabel WHERE {wd:''' + ID2 + ''' p:''' + ID1 + ''' ?answer .
-                        ?answer psv:''' + ID1 + ''' ?answernode .
-                        ?answernode wikibase:quantityAmount ?value .
-                        ?answernode wikibase:quantityUnit ?unit .
-                        SERVICE wikibase:label { bd:serviceParam wikibase:language "nl" .}}
-                        '''
+            else:
+                if type(property_word) == list:
+                    for word in property_word:
+                        ID1 = get_id(word, "property")[0]['id']
+                        output = run_query(ID1, ID2)
 
-                query2 = 'SELECT ?answerLabel WHERE { wd:' + ID2 + ' wdt:' + ID1 + ' ?answer . SERVICE wikibase:label { bd:serviceParam wikibase:language "nl" .}}'
-                
-                data = requests.get('https://query.wikidata.org/sparql', params={'query': query, 'format': 'json'}).json()
-
-                if data["results"]["bindings"] != []:
-                    for item in data["results"]["bindings"]:
-                        for var in item:
-                            output.append("{}\t{}".format(var,item[var]["value"]))
-
+                        if len(output) != 0:
+                            break
                 else:
-                    data = requests.get('https://query.wikidata.org/sparql', params={'query': query2, 'format': 'json'}).json()
-                    for item in data["results"]["bindings"]:
-                        for var in item:
-                            output.append("{}\t{}".format(var,item[var]["value"]))
+                    ID1 = get_id(property_word, "property")[0]['id']
+                    output = run_query(ID1, ID2)
+
 
                 if len(output) != 0:
-                    break
+                        break
 
     # process the queries that require the value words (ja/nee questions)
     else:
