@@ -48,6 +48,7 @@ def word_change(word, is_waar=False):
         'wegen': 'gewicht',
         'heten': 'naam',
         'soort': 'subklasse van',
+        'eten' : 'belangrijkste voedselbron'
     }
 
     noun_words = {
@@ -354,6 +355,8 @@ def main():
     # question = "Wat is de wetenschappelijke naam van de blobvis?"
     # question = "Wat is de hoogst geobserveerde levensduur van een zeehond?"
     # question = "Wat is de beschrijving van een pinguin?"
+    # question = "Wat is de belangrijkste voedselbron van een tijger?"
+    # question = "Wat eet een tijger?"
 
     # --- JA / NEE questions ---
 
@@ -385,11 +388,11 @@ def main():
     # question = "Hoe lang leeft een kat?"
     # question = "Hoeveel kinderen heeft een reuzentoekan per keer?"
     # question = "Hoeveel soorten leeuwen zijn er?"
-    question = "Hoeveel afbeeldingen van leeuwen zijn er?"
+    # question = "Hoeveel afbeeldingen van leeuwen zijn er?"
 
 
     # ---- Questions about sorts of animals ----
-    # question = "Kan je me een lijst geven van alle berensoorten?"
+    question = "Kan je me een lijst geven van alle berensoorten?"
     # question = "Wat zijn alle soorten leeuwen?"
     # question = "Wat zijn alle soorten katten?"
 
@@ -431,9 +434,11 @@ def main():
 
         # Added a lemmatization for the chunk.root, so these words also get lemmatized.
         for word in parse:
+            if word.pos_ == "VERB" and (word.text == "eet" or word.text == "eten"):
+                all_chunks.append(phrase(word)) 
             if word.pos_ == "NOUN":
                 all_chunks.append(phrase(word))
-                
+
         property_word = re.sub(r'\bde\b|\bhet\b|\been\b', '', all_chunks[0])
         entity_word = re.sub(r'\bde\b|\bhet\b|\been\b', '', all_chunks[-1])
 
@@ -481,13 +486,14 @@ def main():
             else:
                 if type(property_word) == list:
                     for word in property_word:
+                        word = word_change(property_word.strip())
                         ID1 = get_id(word, "property")[0]['id']
                         output = run_query(ID1, ID2, hoeveel)
 
                         if len(output) != 0:
                             break
                 else:
-                    property_word = word_change(property_word)
+                    property_word = word_change(property_word.strip())
                     ID1 = get_id(property_word, "property")[0]['id']
                     output = run_query(ID1, ID2, hoeveel)
 
