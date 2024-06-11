@@ -27,8 +27,11 @@ def phrase(word):
                 children.append(child.text)
     result = " ".join(children)
     result = re.sub(r'^(van |tot )', '', result) # remove cases of noun phrases like 'van een kat' 'tot de familie...'
+    result = re.sub(r'^(alle)', '', result) # remove cases of noun phrases like 'van een kat' 'tot de familie...'
+
     result = re.sub(r'(per keer)', '', result) # remove cases of noun phrases like 'eieren per keer''
 
+    print(result)
     return re.sub(r'^(de |het |een )', '', result)
 
 
@@ -43,7 +46,8 @@ def word_change(word, is_waar=False):
         'leven': 'levensverwachting',
         'zwaar': 'gewicht',
         'wegen': 'gewicht',
-        'heten': 'naam'
+        'heten': 'naam',
+        'soort': 'subklasse van',
     }
 
     noun_words = {
@@ -264,7 +268,10 @@ def run_query(ID1, ID2):
 
     query2 = 'SELECT ?answerLabel WHERE { wd:' + ID2 + ' wdt:' + ID1 + ' ?answer . SERVICE wikibase:label { bd:serviceParam wikibase:language "nl" .}}'
 
-    query_list = [query, query2]
+    # Query 3 is added for the questions about how many sorts of animals there are of one specific animal (think of all sorts of cats.)
+    query3 = 'SELECT ?answerLabel WHERE { ?answer wdt:' + ID1 + ' wd:' + ID2 + '. SERVICE wikibase:label { bd:serviceParam wikibase:language "nl" .}}'
+
+    query_list = [query, query2, query3]
 
     for query in query_list:
         data = requests.get('https://query.wikidata.org/sparql', params={'query': query, 'format': 'json'}).json()
@@ -335,11 +342,6 @@ def main():
 
     # question = "Welke kleur heeft een olifant?"
     # question = "Welke kleuren heeft een orca?"
-    # question = "Hoeveel weegt een tijger?"
-    # question = "Hoeveel weegt een reuzenpanda?"
-    # question = "Hoe zwaar is een ijsbeer?"
-    # question = "Hoe groot is een olifant?"
-    # question = "Hoe lang leeft een kat?"
 
     # question = "Wat is het unicode-symbool van een reuzenpanda?"
     # question = "Wat is de wetenschappelijke naam van de blobvis?"
@@ -369,7 +371,18 @@ def main():
     # question = "Hoe groot is een olifant?"
     # question = "Hoeveel eitjes legt een gewone octopus per keer?"
     # question = "Hoeveel eieren leggen reuzentoekans per keer?"
+    # question = "Hoeveel weegt een tijger?"
+    # question = "Hoeveel weegt een reuzenpanda?"
+    # question = "Hoe zwaar is een ijsbeer?"
+    # question = "Hoe groot is een olifant?"
+    # question = "Hoe lang leeft een kat?"
     # question = "Hoeveel kinderen heeft een reuzentoekan per keer?"
+
+
+    # ---- Questions about sorts of animals ----
+    # question = "Kan je me een lijst geven van alle berensoorten?"
+    question = "Wat zijn alle soorten leeuwen?"
+    # question = "Wat zijn alle soorten katten?"
 
     question = question.replace('elke kleuren', 'elke kleur')
     question = question.replace('?', '')
@@ -400,17 +413,34 @@ def main():
     elif str(parse[0]) == 'Behoort'or str(parse[0]) == 'Behoren':
         entity_word, property_word, value_word = janee_questions(parse, True)
 
-    elif parse[0].pos_ == 'VERB' or parse[0].pos_ == 'AUX':
-        entity_word, property_word, value_word = janee_questions(parse, False, parse[0].lemma_)
+    # elif parse[0].pos_ == 'VERB' or parse[0].pos_ == 'AUX':
+    #     entity_word, property_word, value_word = janee_questions(parse, False, parse[0].lemma_)
 
     else:
         all_chunks = []
+
+        # Added a lemmatization for the chunk.root, so these words also get lemmatized.
         for chunk in parse.noun_chunks:
-            all_chunks.append(chunk.text)
+            all_chunks.append(chunk.root.lemma_)
         property_word = re.sub(r'\bde\b|\bhet\b|\been\b', '', all_chunks[0])
         entity_word = re.sub(r'\bde\b|\bhet\b|\been\b', '', all_chunks[1])
 
-    id2_list = get_id(entity_word, "entity")
+    # This is a check if 'soort' or what SpaCY thinks is the lemmatization of 'soorten'; 'soorat'.
+    # If these two are in the entity word, that means that the entity word is a culmination like 'berensoorten'.
+    if "soort" in entity_word:
+        entity_word = entity_word.replace("soort", "")
+        id2_list = get_id(entity_word, "entity")
+
+        property_word = "soort"
+    
+    elif "soorat" in entity_word:
+        entity_word = entity_word.replace("soorat", "")
+        id2_list = get_id(entity_word, "entity")
+
+        property_word = "soort"
+
+    else:
+        id2_list = get_id(entity_word, "entity")
 
     # process the queries that require property words
     if len(value_word) == 0:
@@ -433,6 +463,7 @@ def main():
                         if len(output) != 0:
                             break
                 else:
+                    property_word = word_change(property_word)
                     ID1 = get_id(property_word, "property")[0]['id']
                     output = run_query(ID1, ID2)
 
