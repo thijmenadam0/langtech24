@@ -125,7 +125,8 @@ def hoe_questions(parse):
     '''
     h = False
     if str(parse[0]) == 'hoeveel' or str(parse[0]) == 'Hoeveel':
-        h = True
+        if parse[1].pos_ == 'NOUN':
+            h = True
     for word in parse:
 
         if word.pos_ == 'NOUN' and (word.dep_ == 'nsubj' or word.dep_ == 'obj'): # TODO: find out why I added word.dep_ in the first place
@@ -383,7 +384,8 @@ def main():
     # question = "Hoe groot is een olifant?"
     # question = "Hoe lang leeft een kat?"
     # question = "Hoeveel kinderen heeft een reuzentoekan per keer?"
-    question = "Hoeveel soorten leeuwen zijn er?"
+    # question = "Hoeveel soorten leeuwen zijn er?"
+    question = "Hoeveel afbeeldingen van leeuwen zijn er?"
 
 
     # ---- Questions about sorts of animals ----
@@ -403,7 +405,6 @@ def main():
 
     if str(parse[0]) == 'Hoe' or str(parse[0]) == 'Hoeveel':
         entity_word, property_word, hoeveel = hoe_questions(parse)
-        print(hoeveel)
         entity_word = word_change(str(entity_word))
         property_word = word_change(str(property_word))
 
