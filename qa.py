@@ -27,11 +27,9 @@ def phrase(word):
                 children.append(child.text)
     result = " ".join(children)
     result = re.sub(r'^(van |tot )', '', result) # remove cases of noun phrases like 'van een kat' 'tot de familie...'
-    result = re.sub(r'^(alle)', '', result) # remove cases of noun phrases like 'van een kat' 'tot de familie...'
+    result = re.sub(r'^(alle )', '', result) # remove cases of noun phrases like 'alle soorten katten'.
 
     result = re.sub(r'(per keer)', '', result) # remove cases of noun phrases like 'eieren per keer''
-
-    print(result)
     return re.sub(r'^(de |het |een )', '', result)
 
 
@@ -57,7 +55,9 @@ def word_change(word, is_waar=False):
         'kind' : 'nestgrootte',
         'reuzentoekans': 'reuzentoekan',
         "kiwi's" : 'kiwi',
-        'kangeroe' : 'kangoeroes'
+        'kangeroe' : 'kangoeroes',
+        'pinguin' : 'pinguins',
+        'Leeuwen' : 'leeuw'
     }
 
     root_words = {
@@ -380,8 +380,8 @@ def main():
 
 
     # ---- Questions about sorts of animals ----
-    # question = "Kan je me een lijst geven van alle berensoorten?"
-    question = "Wat zijn alle soorten leeuwen?"
+    question = "Kan je me een lijst geven van alle berensoorten?"
+    # question = "Wat zijn alle soorten leeuwen?"
     # question = "Wat zijn alle soorten katten?"
 
     question = question.replace('elke kleuren', 'elke kleur')
@@ -420,21 +420,35 @@ def main():
         all_chunks = []
 
         # Added a lemmatization for the chunk.root, so these words also get lemmatized.
-        for chunk in parse.noun_chunks:
-            all_chunks.append(chunk.root.lemma_)
+        for word in parse:
+            if word.pos_ == "NOUN":
+                all_chunks.append(phrase(word))
+                
         property_word = re.sub(r'\bde\b|\bhet\b|\been\b', '', all_chunks[0])
-        entity_word = re.sub(r'\bde\b|\bhet\b|\been\b', '', all_chunks[1])
+        entity_word = re.sub(r'\bde\b|\bhet\b|\been\b', '', all_chunks[-1])
+
+        # entity_word = word_change(entity_word)
+        entity_word = word_change(nlp(entity_word)[0].lemma_)
 
     # This is a check if 'soort' or what SpaCY thinks is the lemmatization of 'soorten'; 'soorat'.
     # If these two are in the entity word, that means that the entity word is a culmination like 'berensoorten'.
-    if "soort" in entity_word:
-        entity_word = entity_word.replace("soort", "")
+    if "soorten" in entity_word:
+        entity_word = entity_word.replace("soorten", "")
+        entity_word = nlp(entity_word)[0].lemma_
+        id2_list = get_id(entity_word, "entity")
+
+        property_word = "soort"
+    
+    elif "soort" in entity_word:
+        entity_word = entity_word.replace("soorten", "")
+        entity_word = nlp(entity_word)[0].lemma_
         id2_list = get_id(entity_word, "entity")
 
         property_word = "soort"
     
     elif "soorat" in entity_word:
         entity_word = entity_word.replace("soorat", "")
+        entity_word = nlp(entity_word)[0].lemma_
         id2_list = get_id(entity_word, "entity")
 
         property_word = "soort"
@@ -448,7 +462,7 @@ def main():
             output = []
             ID2 = id2_list[i]['id']
 
-            if property_word == " beschrijving":
+            if "beschrijving" in property_word:
                 data = run_desc_query(ID2)
                 if data["results"]["bindings"] != [{}]:
                     output = data["results"]["bindings"][0]["entDesc"]["value"]
