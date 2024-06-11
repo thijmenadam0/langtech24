@@ -23,6 +23,8 @@ def phrase(word):
                     children.append(child.text)
                 elif child.text == word.text:
                     children.append(child.lemma_)
+                if child.text == 'leeuwen':
+                    children = ['leeuw']
             else:
                 children.append(child.text)
     result = " ".join(children)
@@ -121,6 +123,9 @@ def hoe_questions(parse):
     '''This function makes it so it returns the entity and property
     words for questions sarting with 'hoe'
     '''
+    h = False
+    if str(parse[0]) == 'hoeveel' or str(parse[0]) == 'Hoeveel':
+        h = True
     for word in parse:
 
         if word.pos_ == 'NOUN' and (word.dep_ == 'nsubj' or word.dep_ == 'obj'): # TODO: find out why I added word.dep_ in the first place
@@ -130,14 +135,13 @@ def hoe_questions(parse):
         elif word.dep_ == "ROOT" and (word.pos_ == 'ADJ' or word.pos_ == 'VERB'):
             property_word = word.lemma_
     
-    # Hebben and leggen are auxiliaries, they are never property words.
-    if property_word == 'leggen' or property_word == 'hebben':
+    # Hebben, leggen and zijn are auxiliaries, they are never property words.
+    if property_word == 'leggen' or property_word == 'hebben' or property_word == 'zijn':
         for word in parse:
             if word.pos_ == 'NOUN' and word.dep_ == 'nsubj':
                 property_word = word.lemma_
                 break # Because we need the first one, as that is how Dutch questions are posed.
-    
-    return entity_word, property_word
+    return entity_word, property_word, h
 
 
 # TODO: Get the count_questions working (Hoeveel soorten leeuwen zijn er)
@@ -249,16 +253,15 @@ def wikidata_value_formatize(phrase):
         return ' '.join(phrase_list)
 
 
-def run_query(ID1, ID2):
+def run_query(ID1, ID2, hoeveel=False):
 
     '''
     Takes two wikidata IDs and puts them in different
     queries, then returns the output of the query
     if the match was found as a list
     '''
-
     output = []
-
+    amt = 0
     query = '''SELECT ?value ?unitLabel WHERE {wd:''' + ID2 + ''' p:''' + ID1 + ''' ?answer .
                             ?answer psv:''' + ID1 + ''' ?answernode .
                             ?answernode wikibase:quantityAmount ?value .
@@ -278,8 +281,11 @@ def run_query(ID1, ID2):
         if data["results"]["bindings"] != []:
             for item in data["results"]["bindings"]:
                 for var in item:
+                    amt+=1
                     output.append("{}\t{}".format(var,item[var]["value"]))
 
+    if hoeveel:
+        output = amt
     return output
 
 
@@ -377,10 +383,11 @@ def main():
     # question = "Hoe groot is een olifant?"
     # question = "Hoe lang leeft een kat?"
     # question = "Hoeveel kinderen heeft een reuzentoekan per keer?"
+    question = "Hoeveel soorten leeuwen zijn er?"
 
 
     # ---- Questions about sorts of animals ----
-    question = "Kan je me een lijst geven van alle berensoorten?"
+    # question = "Kan je me een lijst geven van alle berensoorten?"
     # question = "Wat zijn alle soorten leeuwen?"
     # question = "Wat zijn alle soorten katten?"
 
@@ -391,10 +398,12 @@ def main():
     property_word = ""
     entity_word = ""
     value_word = ""
+    hoeveel = False
     output = "Answer is not found"
 
     if str(parse[0]) == 'Hoe' or str(parse[0]) == 'Hoeveel':
-        entity_word, property_word = hoe_questions(parse)
+        entity_word, property_word, hoeveel = hoe_questions(parse)
+        print(hoeveel)
         entity_word = word_change(str(entity_word))
         property_word = word_change(str(property_word))
 
@@ -472,18 +481,20 @@ def main():
                 if type(property_word) == list:
                     for word in property_word:
                         ID1 = get_id(word, "property")[0]['id']
-                        output = run_query(ID1, ID2)
+                        output = run_query(ID1, ID2, hoeveel)
 
                         if len(output) != 0:
                             break
                 else:
                     property_word = word_change(property_word)
                     ID1 = get_id(property_word, "property")[0]['id']
-                    output = run_query(ID1, ID2)
+                    output = run_query(ID1, ID2, hoeveel)
 
 
-                if len(output) != 0:
-                        break
+                if isinstance(output, int) and output != 0:
+                    break
+                if not isinstance(output, int) and len(output) != 0:
+                    break
 
     # process the queries that require the value words (ja/nee questions)
     else:
