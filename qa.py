@@ -48,7 +48,8 @@ def word_change(word, is_waar=False):
         'wegen': 'gewicht',
         'heten': 'naam',
         'soort': 'subklasse van',
-        'eten' : 'belangrijkste voedselbron'
+        'eten' : 'belangrijkste voedselbron',
+        'zwanger' : 'draagtijd'
     }
 
     noun_words = {
@@ -129,12 +130,11 @@ def hoe_questions(parse):
         if parse[1].pos_ == 'NOUN':
             h = True
     for word in parse:
-
         if word.pos_ == 'NOUN' and (word.dep_ == 'nsubj' or word.dep_ == 'obj'): # TODO: find out why I added word.dep_ in the first place
             # entity_word = word.lemma_
             entity_word = phrase(word)
 
-        elif word.dep_ == "ROOT" and (word.pos_ == 'ADJ' or word.pos_ == 'VERB'):
+        elif word.dep_ == "ROOT" and (word.pos_ == 'ADJ' or word.pos_ == 'VERB') or word.dep_ == 'parataxis':
             property_word = word.lemma_
     
     # Hebben, leggen and zijn are auxiliaries, they are never property words.
@@ -389,10 +389,14 @@ def main():
     # question = "Hoeveel kinderen heeft een reuzentoekan per keer?"
     # question = "Hoeveel soorten leeuwen zijn er?"
     # question = "Hoeveel afbeeldingen van leeuwen zijn er?"
+    question = "Hoe lang is een wolf zwanger?"
+    # question = "Hoe lang is de giraffe zwanger?" # TODO: Kijken of we ervoor kunnen zorgen dat 'lang' hier niet word gezien als de adjective.
+
+    # question = "Hoe heet een goudvis in het Duits?"
 
 
     # ---- Questions about sorts of animals ----
-    question = "Kan je me een lijst geven van alle berensoorten?"
+    # question = "Kan je me een lijst geven van alle berensoorten?"
     # question = "Wat zijn alle soorten leeuwen?"
     # question = "Wat zijn alle soorten katten?"
 
