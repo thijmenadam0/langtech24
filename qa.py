@@ -76,6 +76,7 @@ def word_change(word, is_waar=False):
         "kiwi's" : 'kiwi',
         'kangeroe' : 'kangoeroes',
         'pinguin' : 'pinguins',
+        'leeuwen' : 'leeuw',
         'Leeuwen' : 'leeuw'
     }
 
@@ -145,9 +146,10 @@ def hoe_questions(parse):
         if parse[1].pos_ == 'NOUN':
             h = True
     for word in parse:
-        if word.pos_ == 'NOUN' and (word.dep_ == 'nsubj' or word.dep_ == 'obj'): # TODO: find out why I added word.dep_ in the first place
-            # entity_word = word.lemma_
-            entity_word = phrase(word)
+
+        if word.pos_ == 'NOUN' and (word.dep_ == 'nsubj' or word.dep_ == 'obj' or word.dep_ == 'appos' or word.dep_ == 'nmod'):
+            if word.text != "keer":
+                entity_word = phrase(word)
 
         elif word.dep_ == "ROOT" and (word.pos_ == 'ADJ' or word.pos_ == 'VERB') or word.dep_ == 'parataxis':
             property_word = word.lemma_
@@ -158,6 +160,10 @@ def hoe_questions(parse):
             if word.pos_ == 'NOUN' and word.dep_ == 'nsubj':
                 property_word = word.lemma_
                 break # Because we need the first one, as that is how Dutch questions are posed.
+    
+    if property_word == 'eit' or property_word == 'ei' or property_word == 'kind':
+        h = False
+
     return entity_word, property_word, h
 
 
@@ -262,7 +268,7 @@ def wikidata_value_formatize(phrase):
         return ' '.join(phrase_list)
 
 
-def run_query(ID1, ID2, hoeveel=False, ent_2='', prop_2=''):
+def run_query(ID1, ID2, hoeveel=False):
 
     '''
     Takes two wikidata IDs and puts them in different
@@ -282,36 +288,25 @@ def run_query(ID1, ID2, hoeveel=False, ent_2='', prop_2=''):
 
     # Query 3 is added for the questions about how many sorts of animals there are of one specific animal (think of all sorts of cats.)
     query3 = 'SELECT ?answerLabel WHERE { ?answer wdt:' + ID1 + ' wd:' + ID2 + '. SERVICE wikibase:label { bd:serviceParam wikibase:language "nl" .}}'
-    if prop_2 != '':
-        query = 'SELECT ?value ?unitLabel WHERE { wd:' + ID2 + ' p:' + ID1 + ' ?answer . ?answer pq:' + prop_2 + ' wd:' + ent_2 + '. ?answer psv:' + ID1 + ' ?answernode .?answernode wikibase:quantityAmount ?value ; wikibase:quantityUnit ?unit. SERVICE wikibase:label { bd:serviceParam wikibase:language "nl" .}}'
-        data = requests.get('https://query.wikidata.org/sparql', params={'query': query, 'format': 'json'}).json()
-        try:
+
+    query_list = [query, query2, query3]
+
+    try:
+        for query in query_list:
+            data = requests.get('https://query.wikidata.org/sparql', params={'query': query, 'format': 'json'}).json()
             if data["results"]["bindings"] != []:
                 for item in data["results"]["bindings"]:
                     for var in item:
-                        amt += 1
-                        output.append("{}\t{}".format(var, item[var]["value"]))
-        except:
-            return "null"
+                        amt+=1
+                        output.append("{}\t{}".format(var,item[var]["value"]))
 
-    else:
-        query_list = [query, query2, query3]
-
-        try:
-            for query in query_list:
-                data = requests.get('https://query.wikidata.org/sparql', params={'query': query, 'format': 'json'}).json()
-                if data["results"]["bindings"] != []:
-                    for item in data["results"]["bindings"]:
-                        for var in item:
-                            amt+=1
-                            output.append("{}\t{}".format(var,item[var]["value"]))
-        except:
-            return "null"
+    except:
+        return "null"
 
     if hoeveel:
         output = amt
     elif output == []: # to avoid exceeding the limits of queries per second
-        sleep(5)
+        sleep(3)
     return output
 
 def run_trans_query(ID1, language):
@@ -379,7 +374,7 @@ def get_id(word, word_type):
 def main():
     nlp = spacy.load("nl_core_news_lg")
 
-    with open('test_questions.json') as f:
+    with open('train_set.json') as f:
         questions = json.load(f)
 
     # question = input("Stel een vraag over een dier. \n")
@@ -447,284 +442,322 @@ def main():
 
     answer_list = []
     for q in questions:
-        question = q['question']
-        question = question.replace('elke kleuren', 'elke kleur')
-        question = question.replace('?', '')
-        parse = nlp(question)
+        try:
+            question = q['question']
+            question = question.replace('elke kleuren', 'elke kleur')
+            question = question.replace('?', '')
+            parse = nlp(question)
 
-        property_word = ""
-        entity_word = ""
-        value_word = ""
-        answered = False
-        hoeveel = False
-        ent_2 = ''
-        prop_2 = ''
-        output = "Answer is not found"
-        lang_dict = {
-            'Duits': 'de',
-            'Nederlands': 'nl',
-            'Engels': 'en',
-            'Frans': 'fr'
-        }
-
-        if 'in het' in str(parse) or 'vertaald naar' in str(parse):
-            for lang in lang_dict.keys():
-                if lang in str(parse):
-                    for word in parse:
-                        # print(word, word.pos_)
-                        if word.pos_ == 'NOUN' and word.text not in lang_dict.keys():
-                            entity_word = phrase(word)
-                            tr_lang = lang
-        # print(entity_word)
-            entity_id_list = get_id(entity_word, 'entity')
-            for i in range(len(entity_id_list)):
-                output = []
-                entity_id = entity_id_list[i]['id']
-                output = run_trans_query(entity_id, lang_dict[tr_lang])
-
-                if output != 'null':
-                    output = output
-                    # print(output)
-                    break  # for translations only property_word is necessary
-            answer_dict = {
-                "id": q['id'],
-                "question": q['question'],
-                "answer": output,
-                "correct": 0
+            property_word = ""
+            entity_word = ""
+            value_word = ""
+            answered = False
+            hoeveel = False
+            output = "Answer is not found"
+            lang_dict = {
+                'Duits': 'de',
+                'Nederlands': 'nl',
+                'Engels': 'en',
+                'Frans': 'fr'
             }
-            answer_list.append(answer_dict)
-            answered = True
 
-            print(output)
+            if 'in het' in str(parse) or 'vertaald naar' in str(parse):
+                for lang in lang_dict.keys():
+                    if lang in str(parse):
+                        for word in parse:
+                            # print(word, word.pos_)
+                            if word.pos_ == 'NOUN' and word.text not in lang_dict.keys():
+                                entity_word = phrase(word)
+                                tr_lang = lang
+            # print(entity_word)
+                entity_id_list = get_id(entity_word, 'entity')
+                for i in range(len(entity_id_list)):
+                    output = []
+                    entity_id = entity_id_list[i]['id']
+                    output = run_trans_query(entity_id, lang_dict[tr_lang])
 
+                    if output != 'null':
+                        output = output
+                        break  # for translations only property_word is necessary
 
-        if str(parse[0]) == 'Hoe' or str(parse[0]) == 'Hoeveel':
-            entity_word, property_word, hoeveel = hoe_questions(parse)
-            entity_word = word_change(str(entity_word))
-            property_word = word_change(str(property_word))
+                output = output[-1]
+                output = output.replace("nameLabel\t", "")
 
-        elif str(parse[0]) == 'Welke':
-            entity_word, property_word = welke_questions(parse)
-            property_word = word_change(str(property_word))
+                # print(output)
 
-        elif str(parse[0]) == 'Waar':
-            entity_word, property_word = waar_questions(parse)
-            property_word = word_change(property_word, True)
-            entity_word = word_change(entity_word)
+                # output = output.replace("answerLabel\t", "")
+                answer_dict = {
+                    "id": q['id'],
+                    "question": q['question'],
+                    "answer": output,
+                    "correct": 0
+                }
+                answer_list.append(answer_dict)
+                answered = True
 
-        elif str(parse[0]) == 'Zijn' or str(parse[0]) == 'Is':
-            entity_word, property_word, value_word = janee_questions(parse, False)
+            # print(output)
 
-        elif str(parse[0]) == 'Behoort'or str(parse[0]) == 'Behoren':
-            entity_word, property_word, value_word = janee_questions(parse, True)
+            if str(parse[0]) == 'Hoe' or str(parse[0]) == 'Hoeveel':
+                entity_word, property_word, hoeveel = hoe_questions(parse)
+                if len(nlp(entity_word)) == 1:
+                    entity_word = nlp(entity_word)[0].lemma_
+                entity_word = word_change(str(entity_word))
+                property_word = word_change(str(property_word))
 
-        # elif parse[0].pos_ == 'VERB' or parse[0].pos_ == 'AUX':
-        #     entity_word, property_word, value_word = janee_questions(parse, False, parse[0].lemma_)
+            elif str(parse[0]) == 'Welke':
+                entity_word, property_word = welke_questions(parse)
+                property_word = word_change(str(property_word))
 
-        else:
-            all_chunks = []
+            elif str(parse[0]) == 'Waar':
+                entity_word, property_word = waar_questions(parse)
+                property_word = word_change(property_word, True)
+                entity_word = word_change(entity_word)
 
-            # Added a lemmatization for the chunk.root, so these words also get lemmatized.
-            for word in parse:
-                if word.pos_ == "VERB" and (word.text == "eet" or word.text == "eten"):
-                    all_chunks.append(phrase(word)) 
-                if word.pos_ == "NOUN":
-                    all_chunks.append(phrase(word))
-            if len(all_chunks[0]) == 1:
-                property_word = re.sub(r'\bde\b|\bhet\b|\been\b', '', all_chunks[0])
-            else:
-                property_word = re.sub(r'\bde\b|\bhet\b|\been\b', '', all_chunks[0][0])
-                ent_2 = get_id(all_chunks[0][1], 'entity')[0]['id']
-                prop_2 = get_id(all_chunks[0][2], 'property')[0]['id']
-            if len(all_chunks[1]) == 1:
-                entity_word = re.sub(r'\bde\b|\bhet\b|\been\b', '', all_chunks[-1])
-            else:
-                entity_word = re.sub(r'\bde\b|\bhet\b|\been\b', '', all_chunks[-1][0])
-                ent_2 = get_id(all_chunks[-1][1], "entity")[0]['id']
-                prop_2 = get_id(all_chunks[-1][2], "property")[0]['id']
+            elif str(parse[0]) == 'Zijn' or str(parse[0]) == 'Is':
+                entity_word, property_word, value_word = janee_questions(parse, False)
 
-            # for the questions "Eet de koala bladeren"
-            if parse[0].lemma_ == "eten":
+            elif str(parse[0]) == 'Behoort' or str(parse[0]) == 'Behoren':
+                entity_word, property_word, value_word = janee_questions(parse, True)
+
+            elif parse[0].pos_ == 'VERB' or parse[0].pos_ == 'AUX' and parse[1].text != 'je' and parse[1].text != 'u' and parse[1].text != 'jij':
                 entity_word, property_word, value_word = janee_questions(parse, False, parse[0].lemma_)
-                property_word = word_change(parse[0].lemma_)
 
-            # entity_word = word_change(entity_word)
-            entity_word = word_change(nlp(entity_word)[0].lemma_)
+            else:
 
-        # This is a check if 'soort' or what SpaCY thinks is the lemmatization of 'soorten'; 'soorat'.
-        # If these two are in the entity word, that means that the entity word is a culmination like 'berensoorten'.
-        if "soorten" in entity_word:
-            entity_word = entity_word.replace("soorten", "")
-            entity_word = nlp(entity_word)[0].lemma_
-            id2_list = get_id(entity_word, "entity")
+                all_chunks = []
 
-            property_word = "soort"
-        
-        elif "soort" in entity_word:
-            entity_word = entity_word.replace("soorten", "")
-            entity_word = nlp(entity_word)[0].lemma_
-            id2_list = get_id(entity_word, "entity")
+                # Added a lemmatization for the chunk.root, so these words also get lemmatized.
+                for word in parse:
+                    if word.pos_ == "VERB" and (word.text == "eet" or word.text == "eten"):
+                        all_chunks.append(phrase(word)) 
+                    if word.pos_ == "NOUN":
+                        all_chunks.append(phrase(word))
 
-            property_word = "soort"
-        
-        elif "soorat" in entity_word:
-            entity_word = entity_word.replace("soorat", "")
-            entity_word = nlp(entity_word)[0].lemma_
-            id2_list = get_id(entity_word, "entity")
 
-            property_word = "soort"
-
-        else:
-            id2_list = get_id(entity_word, "entity")
-
-        # process the queries that require property words
-        # print(entity_word, property_word, value_word)
-        if len(value_word) == 0:
-            for i in range(len(id2_list)):
-                output = []
-                ID2 = id2_list[i]['id']
-
-                if "beschrijving" in property_word:
-                    data = run_desc_query(ID2)
-                    if data["results"]["bindings"] != [{}]:
-                        output = data["results"]["bindings"][0]["entDesc"]["value"]
-                        break
-
+                if len(all_chunks[0]) == 1:
+                    property_word = re.sub(r'\bde\b|\bhet\b|\been\b', '', all_chunks[0])
                 else:
-                    if type(property_word) == list:
-                        for word in property_word:
-                            word = word_change(word)
-                            ID1 = get_id(word, "property")[0]['id']
-                            output = run_query(ID1, ID2, hoeveel, ent_2, prop_2)
+                    property_word = re.sub(r'\bde\b|\bhet\b|\been\b', '', all_chunks[0])
 
-                            if len(output) != 0:
-                                break
+                if len(all_chunks[1]) == 1:
+                    entity_word = re.sub(r'\bde\b|\bhet\b|\been\b', '', all_chunks[-1])
+                else:
+                    entity_word = re.sub(r'\bde\b|\bhet\b|\been\b', '', all_chunks[-1])
+
+                # for the questions "Eet de koala bladeren"
+                if parse[0].lemma_ == "eten":
+                    entity_word, property_word, value_word = janee_questions(parse, False, parse[0].lemma_)
+                    property_word = word_change(parse[0].lemma_)
+
+                entity_word = word_change(nlp(entity_word)[0].lemma_)
+
+            # This is a check if 'soort' or what SpaCY thinks is the lemmatization of 'soorten'; 'soorat'.
+            # If these two are in the entity word, that means that the entity word is a culmination like 'berensoorten'.
+
+            if "soorten" in entity_word:
+                entity_word = entity_word.replace("soorten", "")
+                entity_word = nlp(entity_word)[0].lemma_
+                id2_list = get_id(entity_word, "entity")
+
+                property_word = "soort"
+            
+            elif "soort" in entity_word:
+                entity_word = entity_word.replace("soorten", "")
+                entity_word = nlp(entity_word)[0].lemma_
+                id2_list = get_id(entity_word, "entity")
+
+                property_word = "soort"
+            
+            elif "soorat" in entity_word:
+                entity_word = entity_word.replace("soorat", "")
+                entity_word = nlp(entity_word)[0].lemma_
+                id2_list = get_id(entity_word, "entity")
+
+                property_word = "soort"
+
+            else:
+                id2_list = get_id(entity_word, "entity")
+
+            # process the queries that require property words
+            # print(entity_word, property_word, value_word)
+            if len(value_word) == 0:
+                for i in range(len(id2_list)):
+                    output = []
+                    ID2 = id2_list[i]['id']
+
+                    if "beschrijving" in property_word:
+                        data = run_desc_query(ID2)
+                        if data["results"]["bindings"] != [{}]:
+                            output = data["results"]["bindings"][0]["entDesc"]["value"]
+                            break
+
                     else:
-                        property_word = word_change(property_word.strip())
-                        ID1 = get_id(property_word, "property")[0]['id']
-                        output = run_query(ID1, ID2, hoeveel, ent_2, prop_2)
+                        if type(property_word) == list:
+                            for word in property_word:
+                                word = word_change(word)
+                                ID1 = get_id(word, "property")[0]['id']
+                                output = run_query(ID1, ID2, hoeveel)
+
+                                if len(output) != 0:
+                                    break
+                        else:
+                            property_word = word_change(property_word.strip())
+                            ID1 = get_id(property_word, "property")[0]['id']
+                            output = run_query(ID1, ID2, hoeveel)
 
 
-                    if isinstance(output, int) and output != 0:
-                        break
-                    if not isinstance(output, int) and len(output) != 0:
-                        break
+                        if isinstance(output, int) and output != 0:
+                            break
+                        if not isinstance(output, int) and len(output) != 0:
+                            break
 
-        # process the queries that require the value words (ja/nee questions)
-        else:
-            # change the format of the value word
-            value_word, is_value_num = value_unit(value_word)
+            # process the queries that require the value words (ja/nee questions)
+            else:
+                # change the format of the value word
+                value_word, is_value_num = value_unit(value_word)
 
-            # Loop through the first 3 possible entries of the entity
-            output = "No"
-            for i in range(len(id2_list[:3])):
+                # Loop through the first 3 possible entries of the entity
+                output = "No"
+                for i in range(len(id2_list[:3])):
 
-                ID2 = id2_list[i]['id']
+                    ID2 = id2_list[i]['id']
 
-                query_unit = '''SELECT ?wdLabel ?final WHERE {
-                            {
-                                SELECT DISTINCT ?wdLabel ?unitLabel ?value WHERE
+                    query_unit = '''SELECT ?wdLabel ?final WHERE {
                                 {
-                                    wd:''' + ID2 + ''' ?p ?statement .
-                                    ?statement ?ps ?ps_ .
-                                    ?ps_ wikibase:quantityAmount ?value ;
-                                        wikibase:quantityUnit ?unit .
+                                    SELECT DISTINCT ?wdLabel ?unitLabel ?value WHERE
+                                    {
+                                        wd:''' + ID2 + ''' ?p ?statement .
+                                        ?statement ?ps ?ps_ .
+                                        ?ps_ wikibase:quantityAmount ?value ;
+                                            wikibase:quantityUnit ?unit .
 
-                                    
-                                    ?wd wikibase:claim ?p;
-                                        rdf:type wikibase:Property.
-                                    
-                                    SERVICE wikibase:label {bd:serviceParam wikibase:language "nl" }
+                                        
+                                        ?wd wikibase:claim ?p;
+                                            rdf:type wikibase:Property.
+                                        
+                                        SERVICE wikibase:label {bd:serviceParam wikibase:language "nl" }
+                                    }
                                 }
-                            }
-                            BIND(concat(STR(?value)," ",STR(?unitLabel)) AS ?final)
-                            }
-                        '''
-                
-
-                query_text = '''SELECT DISTINCT ?propUrl ?propLabel ?valUrl ?valLabel  WHERE
-                                {
-                                    wd:''' + ID2 + ''' ?propUrl ?valUrl.
-                                    ?property ?ref ?propUrl;
-                                                rdf:type wikibase:Property;
-                                                rdfs:label ?propLabel.
-                                    ?valUrl rdfs:label ?valLabel.
-                                    FILTER((LANG(?propLabel)) = "nl")
-                                    FILTER((LANG(?valLabel)) = "nl")
+                                BIND(concat(STR(?value)," ",STR(?unitLabel)) AS ?final)
                                 }
-                                ORDER BY (?propUrl) (?valUrl)'''
+                            '''
+                    
 
-                data = requests.get('https://query.wikidata.org/sparql', params={'query': query_unit, 'format': 'json'}).json()
+                    query_text = '''SELECT DISTINCT ?propUrl ?propLabel ?valUrl ?valLabel  WHERE
+                                    {
+                                        wd:''' + ID2 + ''' ?propUrl ?valUrl.
+                                        ?property ?ref ?propUrl;
+                                                    rdf:type wikibase:Property;
+                                                    rdfs:label ?propLabel.
+                                        ?valUrl rdfs:label ?valLabel.
+                                        FILTER((LANG(?propLabel)) = "nl")
+                                        FILTER((LANG(?valLabel)) = "nl")
+                                    }
+                                    ORDER BY (?propUrl) (?valUrl)'''
+
+                    data = requests.get('https://query.wikidata.org/sparql', params={'query': query_unit, 'format': 'json'}).json()
 
 
-                # run the query with only numerical values as outputs
-                if is_value_num:
-                    for item in data["results"]["bindings"]:
-                        wiki_value = wikidata_value_formatize(item["final"]["value"])
-                        if value_word == wiki_value:
-                            # extra validation of the property value if exists in the question
-                            if property_word != "":
-                                if item["wdLabel"]["value"] in property_word:
+                    # run the query with only numerical values as outputs
+                    if is_value_num:
+                        for item in data["results"]["bindings"]:
+                            wiki_value = wikidata_value_formatize(item["final"]["value"])
+                            if value_word == wiki_value:
+                                # extra validation of the property value if exists in the question
+                                if property_word != "":
+                                    if item["wdLabel"]["value"] in property_word:
+                                        output = "Yes"
+                                # if no property value is mentioned in the question
+                                else:
                                     output = "Yes"
-                            # if no property value is mentioned in the question
-                            else:
+
+                    else:
+                        # run the query that checks the entity description only
+                        data = run_desc_query(ID2)
+                        if data["results"]["bindings"] != [{}]:
+                            if data["results"]["bindings"][0]["entDesc"]["value"] in value_word:
                                 output = "Yes"
 
-                else:
-                    # run the query that checks the entity description only
-                    data = run_desc_query(ID2)
-                    if data["results"]["bindings"] != [{}]:
-                        if data["results"]["bindings"][0]["entDesc"]["value"] in value_word:
-                            output = "Yes"
+                            else:
+                                # run the query that prints all entity's properties and values
+                                data = requests.get('https://query.wikidata.org/sparql', params={'query': query_text, 'format': 'json'}).json()
+                                for item in data["results"]["bindings"]:
+                                    # print(item["propLabel"]["value"], item["valLabel"]["value"])
+                                    # find a match between the value in the question and value in the output
+                                    if item["valLabel"]["value"] in value_word and item["valLabel"]["value"] != "soort":
 
-                        else:
-                            # run the query that prints all entity's properties and values
-                            data = requests.get('https://query.wikidata.org/sparql', params={'query': query_text, 'format': 'json'}).json()
-                            for item in data["results"]["bindings"]:
-                                # print(item["propLabel"]["value"], item["valLabel"]["value"])
-                                # find a match between the value in the question and value in the output
-                                if item["valLabel"]["value"] in value_word and item["valLabel"]["value"] != "soort":
+                                        # extra validation of the property value if exists in the question
+                                        if property_word != "":
+                                            if item["propLabel"]["value"] in property_word:
+                                                output = "Yes"
 
-                                    # extra validation of the property value if exists in the question
-                                    if property_word != "":
-                                        if item["propLabel"]["value"] in property_word:
+                                        # else assume no property exists in the question
+                                        else:
                                             output = "Yes"
 
-                                    # else assume no property exists in the question
-                                    else:
-                                        output = "Yes"
+
+                    if output == "Yes":
+                        break
 
 
-                if output == "Yes":
-                    break
+            if type(output) is list and "unitLabel" in ", ".join(output):
+                unit_ans = []
+                value = None
+                for item in output:
+                    if 'value' in item:
+                        value = item.replace("value\t", "")
+                    if 'unitLabel' in item:
+                        unit = item.replace("unitLabel\t", "")
+                        unit_ans.append(f"{value} {unit}")
+                        value = None
 
-        if type(output) is list and answered == False:
-            for i in output:
-                print(i)
+                output = ", ".join(unit_ans)
+                answer_dict = {
+                    "id" :  q['id'],
+                    "question" : q['question'],
+                    "answer" : output,
+                    "correct" : 0
+                }
 
-            output = ", ".join(output)
-            output = output.replace("answerLabel\t", "")
+                answer_list.append(answer_dict)
+
+            elif type(output) is list and answered == False:
+                # for i in output:
+                #     print(i)
+
+                output = ", ".join(output)
+                output = output.replace("answerLabel\t", "")
+
+                answer_dict = {
+                    "id" :  q['id'],
+                    "question" : q['question'],
+                    "answer" : output,
+                    "correct" : 0
+                }
+
+                answer_list.append(answer_dict)
+
+            elif answered == False:
+                answer_dict = {
+                    "id" :  q['id'],
+                    "question" : q['question'],
+                    "answer" : output,
+                    "correct" : 0
+                }
+                answer_list.append(answer_dict)
+
+                # print(output)
+            # Sleep because otherwise Wikidata gets overused
+            sleep(3)
+        except:
             answer_dict = {
-                "id" :  q['id'],
-                "question" : q['question'],
-                "answer" : output,
-                "correct" : 0
-            }
-
-            answer_list.append(answer_dict)
-        elif answered == False:
-            answer_dict = {
-                "id" :  q['id'],
-                "question" : q['question'],
-                "answer" : output,
-                "correct" : 0
-            }
+                    "id" :  q['id'],
+                    "question" : q['question'],
+                    "answer" : "null",
+                    "correct" : 0
+                }
             answer_list.append(answer_dict)
 
-            print(output, 'eee')
-        # Sleep because otherwise Wikidata gets overused
-        sleep(5)
-    
     with open("system.json", "w") as outfile:
         json.dump(answer_list, outfile)
 
