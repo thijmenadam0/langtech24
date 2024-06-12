@@ -293,6 +293,8 @@ def run_query(ID1, ID2, hoeveel=False):
 
     if hoeveel:
         output = amt
+    elif output == []: # to avoid exceeding the limits of queries per second
+        sleep(5)
     return output
 
 
@@ -457,6 +459,11 @@ def main():
             property_word = re.sub(r'\bde\b|\bhet\b|\been\b', '', all_chunks[0])
             entity_word = re.sub(r'\bde\b|\bhet\b|\been\b', '', all_chunks[-1])
 
+            # for the questions "Eet de koala bladeren"
+            if parse[0].lemma_ == "eten":
+                entity_word, property_word, value_word = janee_questions(parse, False, parse[0].lemma_)
+                property_word = word_change(parse[0].lemma_)
+
             # entity_word = word_change(entity_word)
             entity_word = word_change(nlp(entity_word)[0].lemma_)
 
@@ -487,6 +494,7 @@ def main():
             id2_list = get_id(entity_word, "entity")
 
         # process the queries that require property words
+        print(entity_word, property_word, value_word)
         if len(value_word) == 0:
             for i in range(len(id2_list)):
                 output = []
@@ -501,7 +509,7 @@ def main():
                 else:
                     if type(property_word) == list:
                         for word in property_word:
-                            word = word_change(property_word)
+                            word = word_change(word)
                             ID1 = get_id(word, "property")[0]['id']
                             output = run_query(ID1, ID2, hoeveel)
 
