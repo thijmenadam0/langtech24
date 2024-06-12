@@ -1,32 +1,4 @@
 [
     {"id": 1,
-    "question" : "Welke kleur heeft een olifant?"},
-
-    {"id": 2,
-    "question" : "Wat is de wetenschappelijke naam van de blobvis?"},
-
-    {"id": 3,
-    "question" : "Behoren de olifanten tot de subklasse van zoogdieren?"},
-
-    {"id": 4,
-    "question" : "Wat zijn alle soorten katten?"},
-
-    {"id": 5,
-    "question" : "Hoeveel soorten leeuwen zijn er?"},
-
-    {"id": 6,
-    "question" : "Hoeveel weegt een reuzenpanda?"},
-
-    {"id": 7,
-    "question" : "Hoe lang leeft een kat?"},
-
-    {"id": 8,
-    "question" : "Hoe lang is een wolf zwanger?"},
-
-    {"id": 9,
-    "question" : "Kan je me een lijst geven van alle berensoorten?"},
-
-    {"id": 10,
-    "question" : "Welke kleuren heeft de orca?"}
-
+    "question" : "Wat is het gewicht van een vrouwelijke leeuw?"}
 ]

@@ -16,25 +16,38 @@ def phrase(word):
     to the noun children in the sentence, combines them in
     a noun phrase and returns as a string
     '''
+    special_adjectives = {
+        'vrouwelijke': ['vrouwelijk organisme', 'sekse of geslacht'],
+        'mannelijke': ['mannelijk organisme', 'sekse of geslacht'],
+    }
+    ent_2 = ''
+    prop_2 = ''
     children = []
     for child in word.subtree :
-        if child.dep_ != 'cop' and child.dep_ != 'nmod:poss': # get rid of words 'zijn' and 'is'
-            if word.dep_ == 'ROOT' or word.dep_ == 'nsubj':
-                # allow only adj and det to be added to the root noun phrase
-                if child.pos_ == 'ADJ' or child.pos_ == 'DET' or child.dep_ == 'amod': # amod for 'bedreigde diersoort'
+        if child.text not in special_adjectives:
+            if child.dep_ != 'cop' and child.dep_ != 'nmod:poss': # get rid of words 'zijn' and 'is'
+                if word.dep_ == 'ROOT' or word.dep_ == 'nsubj':
+                    # allow only adj and det to be added to the root noun phrase
+                    if child.pos_ == 'ADJ' or child.dep_ == 'amod':  # amod for 'bedreigde diersoort'
+                        children.append(child.text)
+                    elif child.text == word.text:
+                        children.append(child.lemma_)
+                    if child.text == 'leeuwen' and word.pos_ != 'NOUN':
+                        children = ['leeuwen']
+                else:
                     children.append(child.text)
-                elif child.text == word.text:
-                    children.append(child.lemma_)
-                if child.text == 'leeuwen':
-                    children = ['leeuw']
-            else:
-                children.append(child.text)
+        else:
+            ent_2 = special_adjectives[child.text][0]
+            prop_2 = special_adjectives[child.text][1]
     result = " ".join(children)
     result = re.sub(r'^(van |tot )', '', result) # remove cases of noun phrases like 'van een kat' 'tot de familie...'
     result = re.sub(r'^(alle )', '', result) # remove cases of noun phrases like 'alle soorten katten'.
 
     result = re.sub(r'(per keer)', '', result) # remove cases of noun phrases like 'eieren per keer''
-    return re.sub(r'^(de |het |een )', '', result)
+    if ent_2 == '':
+        return re.sub(r'^(de |het |een )', '', result)
+    else:
+        return re.sub(r'^(de |het |een )', '', result), ent_2, prop_2
 
 
 def word_change(word, is_waar=False):
@@ -148,14 +161,6 @@ def hoe_questions(parse):
     return entity_word, property_word, h
 
 
-# TODO: Get the count_questions working (Hoeveel soorten leeuwen zijn er)
-
-def count_questions(parse):
-    ''''''
-
-    return
-
-
 def janee_questions(parse, is_behoort, verb_lemma=''):
 
     '''
@@ -257,7 +262,7 @@ def wikidata_value_formatize(phrase):
         return ' '.join(phrase_list)
 
 
-def run_query(ID1, ID2, hoeveel=False):
+def run_query(ID1, ID2, hoeveel=False, ent_2='', prop_2=''):
 
     '''
     Takes two wikidata IDs and puts them in different
@@ -277,19 +282,31 @@ def run_query(ID1, ID2, hoeveel=False):
 
     # Query 3 is added for the questions about how many sorts of animals there are of one specific animal (think of all sorts of cats.)
     query3 = 'SELECT ?answerLabel WHERE { ?answer wdt:' + ID1 + ' wd:' + ID2 + '. SERVICE wikibase:label { bd:serviceParam wikibase:language "nl" .}}'
-
-    query_list = [query, query2, query3]
-
-    try:
-        for query in query_list:
-            data = requests.get('https://query.wikidata.org/sparql', params={'query': query, 'format': 'json'}).json()
+    if prop_2 != '':
+        query = 'SELECT ?value ?unitLabel WHERE { wd:' + ID2 + ' p:' + ID1 + ' ?answer . ?answer pq:' + prop_2 + ' wd:' + ent_2 + '. ?answer psv:' + ID1 + ' ?answernode .?answernode wikibase:quantityAmount ?value ; wikibase:quantityUnit ?unit. SERVICE wikibase:label { bd:serviceParam wikibase:language "nl" .}}'
+        data = requests.get('https://query.wikidata.org/sparql', params={'query': query, 'format': 'json'}).json()
+        try:
             if data["results"]["bindings"] != []:
                 for item in data["results"]["bindings"]:
                     for var in item:
-                        amt+=1
-                        output.append("{}\t{}".format(var,item[var]["value"]))
-    except:
-        return "null"
+                        amt += 1
+                        output.append("{}\t{}".format(var, item[var]["value"]))
+        except:
+            return "null"
+
+    else:
+        query_list = [query, query2, query3]
+
+        try:
+            for query in query_list:
+                data = requests.get('https://query.wikidata.org/sparql', params={'query': query, 'format': 'json'}).json()
+                if data["results"]["bindings"] != []:
+                    for item in data["results"]["bindings"]:
+                        for var in item:
+                            amt+=1
+                            output.append("{}\t{}".format(var,item[var]["value"]))
+        except:
+            return "null"
 
     if hoeveel:
         output = amt
@@ -419,6 +436,8 @@ def main():
         entity_word = ""
         value_word = ""
         hoeveel = False
+        ent_2 = ''
+        prop_2 = ''
         output = "Answer is not found"
 
         if str(parse[0]) == 'Hoe' or str(parse[0]) == 'Hoeveel':
@@ -451,12 +470,20 @@ def main():
             for word in parse:
                 if word.pos_ == "VERB" and (word.text == "eet" or word.text == "eten"):
                     all_chunks.append(phrase(word)) 
-                if word.pos_ == "NOUN":
+                if word.pos_ == "NOUN" or word == 'leeuw' or word == 'leeuwen':
                     all_chunks.append(phrase(word))
-
-            property_word = re.sub(r'\bde\b|\bhet\b|\been\b', '', all_chunks[0])
-            entity_word = re.sub(r'\bde\b|\bhet\b|\been\b', '', all_chunks[-1])
-
+            if len(all_chunks[0]) == 1:
+                property_word = re.sub(r'\bde\b|\bhet\b|\been\b', '', all_chunks[0])
+            else:
+                property_word = re.sub(r'\bde\b|\bhet\b|\been\b', '', all_chunks[0][0])
+                ent_2 = get_id(all_chunks[0][1], 'entity')[0]['id']
+                prop_2 = get_id(all_chunks[0][2], 'property')[0]['id']
+            if len(all_chunks[1]) == 1:
+                entity_word = re.sub(r'\bde\b|\bhet\b|\been\b', '', all_chunks[1])
+            else:
+                entity_word = re.sub(r'\bde\b|\bhet\b|\been\b', '', all_chunks[1][0])
+                ent_2 = get_id(all_chunks[1][1], "entity")[0]['id']
+                prop_2 = get_id(all_chunks[1][2], "property")[0]['id']
             # entity_word = word_change(entity_word)
             entity_word = word_change(nlp(entity_word)[0].lemma_)
 
@@ -503,14 +530,14 @@ def main():
                         for word in property_word:
                             word = word_change(property_word)
                             ID1 = get_id(word, "property")[0]['id']
-                            output = run_query(ID1, ID2, hoeveel)
+                            output = run_query(ID1, ID2, hoeveel, ent_2, prop_2)
 
                             if len(output) != 0:
                                 break
                     else:
                         property_word = word_change(property_word.strip())
                         ID1 = get_id(property_word, "property")[0]['id']
-                        output = run_query(ID1, ID2, hoeveel)
+                        output = run_query(ID1, ID2, hoeveel, ent_2, prop_2)
 
 
                     if isinstance(output, int) and output != 0:
