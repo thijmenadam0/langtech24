@@ -481,14 +481,11 @@ def main():
                 ent_2 = get_id(all_chunks[0][1], 'entity')[0]['id']
                 prop_2 = get_id(all_chunks[0][2], 'property')[0]['id']
             if len(all_chunks[1]) == 1:
-                entity_word = re.sub(r'\bde\b|\bhet\b|\been\b', '', all_chunks[1])
+                entity_word = re.sub(r'\bde\b|\bhet\b|\been\b', '', all_chunks[-1])
             else:
-                entity_word = re.sub(r'\bde\b|\bhet\b|\been\b', '', all_chunks[1][0])
-                ent_2 = get_id(all_chunks[1][1], "entity")[0]['id']
-                prop_2 = get_id(all_chunks[1][2], "property")[0]['id']
-
-            property_word = re.sub(r'\bde\b|\bhet\b|\been\b', '', all_chunks[0])
-            entity_word = re.sub(r'\bde\b|\bhet\b|\been\b', '', all_chunks[-1])
+                entity_word = re.sub(r'\bde\b|\bhet\b|\been\b', '', all_chunks[-1][0])
+                ent_2 = get_id(all_chunks[-1][1], "entity")[0]['id']
+                prop_2 = get_id(all_chunks[-1][2], "property")[0]['id']
 
             # for the questions "Eet de koala bladeren"
             if parse[0].lemma_ == "eten":
@@ -525,7 +522,7 @@ def main():
             id2_list = get_id(entity_word, "entity")
 
         # process the queries that require property words
-        print(entity_word, property_word, value_word)
+        # print(entity_word, property_word, value_word)
         if len(value_word) == 0:
             for i in range(len(id2_list)):
                 output = []
