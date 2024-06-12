@@ -314,6 +314,24 @@ def run_query(ID1, ID2, hoeveel=False, ent_2='', prop_2=''):
         sleep(5)
     return output
 
+def run_trans_query(ID1, language):
+    '''runs the query to translate an entity into the specified language'''
+    output = []
+    query = '''SELECT ?name ?nameLabel WHERE {
+            wd:''' + ID1 + ''' rdfs:label ?name
+            FILTER(lang(?name) = "'''+ language + '''")
+            SERVICE wikibase:label { bd:serviceParam wikibase:language "nl" .}}'''
+    data = requests.get('https://query.wikidata.org/sparql', params={'query': query, 'format': 'json'}).json()
+    try:
+        if data["results"]["bindings"] != []:
+            for item in data["results"]["bindings"]:
+                for var in item:
+                    output.append("{}\t{}".format(var, item[var]["value"]))
+
+        return output
+
+    except:
+        return "null"
 
 def run_desc_query(ID2):
 
@@ -437,10 +455,48 @@ def main():
         property_word = ""
         entity_word = ""
         value_word = ""
+        answered = False
         hoeveel = False
         ent_2 = ''
         prop_2 = ''
         output = "Answer is not found"
+        lang_dict = {
+            'Duits': 'de',
+            'Nederlands': 'nl',
+            'Engels': 'en',
+            'Frans': 'fr'
+        }
+
+        if 'in het' in str(parse) or 'vertaald naar' in str(parse):
+            for lang in lang_dict.keys():
+                if lang in str(parse):
+                    for word in parse:
+                        # print(word, word.pos_)
+                        if word.pos_ == 'NOUN' and word.text not in lang_dict.keys():
+                            entity_word = phrase(word)
+                            tr_lang = lang
+        # print(entity_word)
+            entity_id_list = get_id(entity_word, 'entity')
+            for i in range(len(entity_id_list)):
+                output = []
+                entity_id = entity_id_list[i]['id']
+                output = run_trans_query(entity_id, lang_dict[tr_lang])
+
+                if output != 'null':
+                    output = output
+                    # print(output)
+                    break  # for translations only property_word is necessary
+            answer_dict = {
+                "id": q['id'],
+                "question": q['question'],
+                "answer": output,
+                "correct": 0
+            }
+            answer_list.append(answer_dict)
+            answered = True
+
+            print(output)
+
 
         if str(parse[0]) == 'Hoe' or str(parse[0]) == 'Hoeveel':
             entity_word, property_word, hoeveel = hoe_questions(parse)
@@ -642,7 +698,7 @@ def main():
                 if output == "Yes":
                     break
 
-        if type(output) is list:
+        if type(output) is list and answered == False:
             for i in output:
                 print(i)
 
@@ -656,7 +712,7 @@ def main():
             }
 
             answer_list.append(answer_dict)
-        else:
+        elif answered == False:
             answer_dict = {
                 "id" :  q['id'],
                 "question" : q['question'],
@@ -665,7 +721,7 @@ def main():
             }
             answer_list.append(answer_dict)
 
-            print(output)
+            print(output, 'eee')
         # Sleep because otherwise Wikidata gets overused
         sleep(5)
     
